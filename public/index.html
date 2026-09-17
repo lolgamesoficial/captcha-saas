@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi Plataforma - WorkPanel</title>
+  <style>
+    :root {
+      --bg-dark: #121212;
+      --card-bg: #1e1e1e;
+      --card-inner: #2a2a2a;
+      --accent: #4caf50;
+      --accent-hover: #45a049;
+      --border: #333333;
+      --text-muted: #aaaaaa;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      background-color: var(--bg-dark);
+      color: #ffffff;
+      min-height: 100vh;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* BARRA SUPERIOR (HEADER LABORAL) */
+    .navbar {
+      background-color: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      font-weight: bold;
+      font-size: 1.1rem;
+      color: var(--accent);
+    }
+
+    /* BOTÓN PERFIL DE USUARIO Y MENU DESPLEGABLE */
+    .user-profile-menu {
+      position: relative;
+    }
+
+    .user-pill {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .user-pill:hover { background: #333; }
+
+    .balance-tag {
+      background: rgba(76, 175, 80, 0.2);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: bold;
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      top: 110%;
+      right: 0;
+      width: 220px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+      display: none;
+      flex-direction: column;
+      z-index: 200;
+      overflow: hidden;
+    }
+
+    .dropdown-menu.active { display: flex; }
+
+    .dropdown-item {
+      padding: 12px 16px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.2s;
+    }
+
+    .dropdown-item:last-child { border-bottom: none; }
+    .dropdown-item:hover { background: var(--card-inner); }
+
+    /* CONTENEDOR DE TARJETAS Y SECCIONES */
+    .content-area {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      width: 100%;
+      max-width: 500px;
+      text-align: center;
+      position: relative;
+    }
+
+    h2 { color: var(--accent); margin-top: 0; }
+    h3 { margin-top: 0; color: #fff; }
+
+    .stat-box {
+      display: flex;
+      justify-content: space-between;
+      background: var(--card-inner);
+      padding: 10px 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    .captcha-container {
+      background: #333;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      font-size: 24px;
+      font-weight: bold;
+      letter-spacing: 4px;
+      color: #ffeb3b;
+    }
+
+    input[type="text"], input[type="password"], select {
+      width: 100%;
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #252525;
+      color: #fff;
+      font-size: 16px;
+      box-sizing: border-box;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+
+    select { text-align-last: center; }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      background-color: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover { background-color: var(--accent-hover); }
+    button:disabled {
+      background-color: #555555;
+      cursor: not-allowed;
+    }
+
+    .switch-link {
+      margin-top: 15px;
+      font-size: 14px;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .hidden { display: none !important; }
+
+    /* PESTAÑAS NAVEGABLES EN LA PORTADA */
+    .tab-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .panel-view { display: none; }
+    .panel-view.active { display: block; }
+
+    /* MODALES A PANTALLA COMPLETA */
+    .overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(10, 10, 10, 0.98);
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      box-sizing: border-box;
+      z-index: 9999;
+    }
+
+    .ad-space {
+      width: 100%;
+      max-width: 320px;
+      min-height: 260px;
+      background: #181818;
+      border: 1px dashed #444;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 20px 0;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .modal-btn { max-width: 300px; }
+
+    .close-x {
+      position: absolute;
+      top: 15px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #aaa;
+      border: 1px solid #444;
+      font-size: 14px;
+      font-weight: bold;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s ease;
+    }
+
+    .close-x:hover {
+      background: #f44336;
+      color: #fff;
+      border-color: #f44336;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- CABECERA SUPERIOR (SOLO VISIBLE AL INICIAR SESIÓN) -->
+  <header id="mainNavbar" class="navbar hidden">
+    <div class="brand">💼 WorkPanel</div>
+    
+    <div class="user-profile-menu">
+      <div class="user-pill" onclick="toggleUserDropdown(event)">
+        <span>👤 <strong id="navUserName">-</strong></span>
+        <span class="balance-tag">$<span id="navUserBalance">0.000</span></span>
+      </div>
+
+      <!-- MENÚ DESPLEGABLE DE USUARIO -->
+      <div id="userDropdown" class="dropdown-menu">
+        <div class="dropdown-item" onclick="mostrarSeccion('panelRetiros')">💳 1. Solicitar Retiro</div>
+        <div class="dropdown-item" onclick="mostrarSeccion('panelPerfil')">👤 2. Información del Usuario</div>
+        <div class="dropdown-item" onclick="mostrarSeccion('panelConfig')">⚙️ 3. Configuración</div>
+        <div class="dropdown-item" style="color: #f44336;" onclick="cerrarSesion()">🚪 Cerrar Sesión</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="content-area">
+
+    <!-- MÓDULO 1: AUTENTICACIÓN (LOGIN Y REGISTRO) -->
+    <div id="authCard" class="card">
+      <h2 id="authTitle">Iniciar Sesión</h2>
+      
+      <input type="text" id="authUser" placeholder="Nombre de Usuario" autocomplete="off">
+      <input type="password" id="authPass" placeholder="Contraseña">
+
+      <button id="authBtn" onclick="procesarAuth()">Entrar</button>
+
+      <div class="switch-link" id="authSwitch" onclick="cambiarModoAuth()">
+        ¿No tienes cuenta? Regístrate aquí
+      </div>
+    </div>
+
+    <!-- MÓDULO 2: PANEL PRINCIPAL (TRABAJO Y CONTENIDOS) -->
+    <div id="appCard" class="card hidden">
+      
+      <!-- BOTONES DE NAVEGACIÓN PORTADA -->
+      <div class="tab-container">
+        <button class="tab-btn active" id="btnTabTrabajo" onclick="switchMainTab('trabajo')">💼 Sección de Trabajo</button>
+        <button class="tab-btn" id="btnTabJuegos" onclick="switchMainTab('juegos')">🎮 Juegos Propios</button>
+      </div>
+
+      <!-- VISTA A: CAPTCHAS (TRABAJO) -->
+      <div id="viewTrabajo" class="panel-view active">
+        <div class="stat-box">
+          <div>Captchas: <span id="contador">0</span>/20</div>
+          <div>Saldo: $<span id="saldo">0.000</span></div>
+        </div>
+
+        <div class="captcha-container" id="captchaBox">A7X9K</div>
+
+        <input type="text" id="respuestaInput" placeholder="Escribe el código aquí" autocomplete="off">
+        <button onclick="enviarRespuesta()">Enviar Captcha</button>
+      </div>
+
+      <!-- VISTA B: JUEGOS PROPIOS MONETIZADOS -->
+      <div id="viewJuegos" class="panel-view">
+        <h3>Zona de Minijuegos</h3>
+        <p style="font-size: 13px; color: var(--text-muted);">Juegos desarrollados por la plataforma con integración publicitaria.</p>
+        
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+          <div style="background: var(--card-inner); padding: 12px; border-radius: 8px;">
+            <div style="font-weight: bold; margin-bottom: 5px;">🎯 Ruleta de la Suerte</div>
+            <button style="padding: 8px; font-size: 14px;" onclick="alert('Iniciando juego de Ruleta...')">Jugar</button>
+          </div>
+          <div style="background: var(--card-inner); padding: 12px; border-radius: 8px;">
+            <div style="font-weight: bold; margin-bottom: 5px;">🧠 Desafío de Memoria</div>
+            <button style="padding: 8px; font-size: 14px;" onclick="alert('Iniciando juego de Memoria...')">Jugar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- VISTA C: SOLICITUD DE RETIROS (OPCIÓN 1 DEL MENÚ) -->
+      <div id="panelRetiros" class="panel-view">
+        <h3>💳 Panel de Retiros</h3>
+        <p style="font-size: 13px; color: var(--text-muted);">Gestiona y solicita tus cobros acumulados.</p>
+        
+        <select id="metodoRetiro">
+          <option>Binance Pay (USDT)</option>
+          <option>FaucetPay</option>
+          <option>PayPal</option>
+        </select>
+        <input type="text" id="destinoRetiro" placeholder="Correo o ID de Pago">
+        <button onclick="alert('Solicitud enviada exitosamente.')">Procesar Retiro</button>
+      </div>
+
+      <!-- VISTA D: INFORMACIÓN DEL USUARIO (OPCIÓN 2 DEL MENÚ) -->
+      <div id="panelPerfil" class="panel-view">
+        <h3>👤 Información del Usuario</h3>
+        <div style="background: var(--card-inner); padding: 15px; border-radius: 8px; text-align: left; line-height: 1.8; font-size: 14px;">
+          <div><strong>ID:</strong> <span id="infoId">-</span></div>
+          <div><strong>Usuario:</strong> <span id="infoUsuario">-</span></div>
+          <div><strong>Captchas Resueltos:</strong> <span id="infoCaptchas">0</span></div>
+        </div>
+      </div>
+
+      <!-- VISTA E: CONFIGURACIÓN DE CUENTA (OPCIÓN 3 DEL MENÚ) -->
+      <div id="panelConfig" class="panel-view">
+        <h3>⚙️ Configuración</h3>
+        <input type="password" id="newPassInput" placeholder="Nueva Contraseña">
+        <button onclick="alert('Configuración guardada.')">Actualizar Datos</button>
+      </div>
+
+      <!-- MODALES DE PUBLICIDAD ADSTERRA E INACTIVIDAD -->
+      <div id="modalPublicidad" class="overlay">
+        <h2 style="color:#ffeb3b; margin-bottom: 5px;">¡Bloque Completado! 🎉</h2>
+        <p style="margin-top: 0; font-size: 15px; color: #ccc;">Pausa publicitaria obligatoria</p>
+        
+        <div class="ad-space">
+          <script type="text/javascript">
+            atOptions = {
+              'key' : '0e78648e63a96d4162695b14b384a415',
+              'format' : 'iframe',
+              'height' : 250,
+              'width' : 300,
+              'params' : {}
+            };
+          </script>
+          <script type="text/javascript" src="https://www.highrevenueformat.com/0e78648e63a96d4162695b14b384a415/invoke.js"></script>
+        </div>
+
+        <button id="btnContinuar" class="modal-btn" disabled onclick="cerrarPublicidad()">Continuar (15s)</button>
+      </div>
+
+      <div id="modalInactividad" class="overlay">
+        <div class="close-x" onclick="reactivarSesion()" title="Cerrar">✕</div>
+        <h2 style="color:#f44336; margin-bottom: 5px;">¿Sigues ahí? 💤</h2>
+        <p style="margin-top: 0; font-size: 15px; color: #ccc;">Sesión pausada por inactividad.</p>
+
+        <div class="ad-space">
+          <script type="text/javascript">
+            atOptions = {
+              'key' : '0e78648e63a96d4162695b14b384a415',
+              'format' : 'iframe',
+              'height' : 250,
+              'width' : 300,
+              'params' : {}
+            };
+          </script>
+          <script type="text/javascript" src="https://www.highrevenueformat.com/0e78648e63a96d4162695b14b384a415/invoke.js"></script>
+        </div>
+
+        <button id="btnInactividad" class="modal-btn" disabled onclick="reactivarSesion()">Reactivar Sesión (15s)</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    let timerInactividad;
+    let modoRegistro = false;
+    let usuarioLogueado = null;
+
+    // Control de Menús y Vistas
+    function toggleUserDropdown(e) {
+      e.stopPropagation();
+      document.getElementById('userDropdown').classList.toggle('active');
+    }
+
+    document.addEventListener('click', () => {
+      document.getElementById('userDropdown').classList.remove('active');
+    });
+
+    function ocultarTodasVistas() {
+      document.querySelectorAll('.panel-view').forEach(el => el.classList.remove('active'));
+    }
+
+    function switchMainTab(tab) {
+      ocultarTodasVistas();
+      document.getElementById('btnTabTrabajo').classList.remove('active');
+      document.getElementById('btnTabJuegos').classList.remove('active');
+
+      if (tab === 'trabajo') {
+        document.getElementById('viewTrabajo').classList.add('active');
+        document.getElementById('btnTabTrabajo').classList.add('active');
+      } else {
+        document.getElementById('viewJuegos').classList.add('active');
+        document.getElementById('btnTabJuegos').classList.add('active');
+      }
+    }
+
+    function mostrarSeccion(idSeccion) {
+      ocultarTodasVistas();
+      document.getElementById('btnTabTrabajo').classList.remove('active');
+      document.getElementById('btnTabJuegos').classList.remove('active');
+      document.getElementById(idSeccion).classList.add('active');
+    }
+
+    // Control de Autenticación
+    function cambiarModoAuth() {
+      modoRegistro = !modoRegistro;
+      document.getElementById('authTitle').innerText = modoRegistro ? 'Crear Cuenta' : 'Iniciar Sesión';
+      document.getElementById('authBtn').innerText = modoRegistro ? 'Registrarse' : 'Entrar';
+      document.getElementById('authSwitch').innerText = modoRegistro 
+        ? '¿Ya tienes cuenta? Inicia sesión aquí' 
+        : '¿No tienes cuenta? Regístrate aquí';
+    }
+
+    async function procesarAuth() {
+      const usuarioInput = document.getElementById('authUser').value.trim();
+      const passwordInput = document.getElementById('authPass').value.trim();
+
+      if (!usuarioInput || !passwordInput) {
+        alert('Por favor completa los campos de usuario y contraseña.');
+        return;
+      }
+
+      const endpoint = modoRegistro ? '/api/registro' : '/api/login';
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuario: usuarioInput, password: passwordInput })
+        });
+        const data = await res.json();
+
+        if (data.exito) {
+          if (modoRegistro) {
+            alert('¡Usuario creado con éxito! Ahora inicia sesión.');
+            cambiarModoAuth();
+          } else {
+            usuarioLogueado = data.usuario;
+            iniciarPlataforma();
+          }
+        } else {
+          alert(data.mensaje || 'Error al autenticar.');
+        }
+      } catch (err) {
+        alert('Error de conexión con el servidor.');
+      }
+    }
+
+    function actualizarDatosInterfaz() {
+      document.getElementById('navUserName').innerText = usuarioLogueado.nombre;
+      document.getElementById('navUserBalance').innerText = usuarioLogueado.saldo;
+      document.getElementById('contador').innerText = usuarioLogueado.captchasResueltos % 20;
+      document.getElementById('saldo').innerText = usuarioLogueado.saldo;
+
+      // Actualizar datos del perfil
+      document.getElementById('infoId').innerText = usuarioLogueado.id;
+      document.getElementById('infoUsuario').innerText = usuarioLogueado.nombre;
+      document.getElementById('infoCaptchas').innerText = usuarioLogueado.captchasResueltos;
+    }
+
+    function iniciarPlataforma() {
+      document.getElementById('authCard').classList.add('hidden');
+      document.getElementById('appCard').classList.remove('hidden');
+      document.getElementById('mainNavbar').classList.remove('hidden');
+
+      actualizarDatosInterfaz();
+      switchMainTab('trabajo');
+
+      document.getElementById('captchaBox').innerText = Math.random().toString(36).substring(2, 7).toUpperCase();
+      resetearInactividad();
+    }
+
+    function cerrarSesion() {
+      usuarioLogueado = null;
+      clearTimeout(timerInactividad);
+      document.getElementById('appCard').classList.add('hidden');
+      document.getElementById('mainNavbar').classList.add('hidden');
+      document.getElementById('authCard').classList.remove('hidden');
+      document.getElementById('authUser').value = '';
+      document.getElementById('authPass').value = '';
+    }
+
+    // Lógica de Inactividad y Captchas
+    function resetearInactividad() {
+      clearTimeout(timerInactividad);
+      if (usuarioLogueado) {
+        timerInactividad = setTimeout(() => {
+          mostrarInactividad();
+        }, 180000);
+      }
+    }
+
+    window.onload = resetearInactividad;
+    document.onmousemove = resetearInactividad;
+    document.onkeypress = resetearInactividad;
+
+    async function enviarRespuesta() {
+      const input = document.getElementById('respuestaInput');
+      if (!input.value.trim() || !usuarioLogueado) return;
+
+      const res = await fetch('/api/resolver', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          respuesta: input.value,
+          usuarioId: usuarioLogueado.id 
+        })
+      });
+      const data = await res.json();
+
+      if (data.exito) {
+        usuarioLogueado.captchasResueltos = data.totalCaptchas;
+        usuarioLogueado.saldo = data.saldoAcumulado;
+        actualizarDatosInterfaz();
+        input.value = '';
+
+        document.getElementById('captchaBox').innerText = Math.random().toString(36).substring(2, 7).toUpperCase();
+
+        if (data.mostrarAnuncio) {
+          mostrarAnuncioPublicitario();
+        }
+      } else {
+        alert(data.mensaje || 'Error al procesar el captcha.');
+      }
+    }
+
+    function iniciarContadorModal(btnId, textoBase) {
+      const btn = document.getElementById(btnId);
+      btn.disabled = true;
+      let segundos = 15;
+      btn.innerText = `${textoBase} (${segundos}s)`;
+
+      const intervalo = setInterval(() => {
+        segundos--;
+        btn.innerText = `${textoBase} (${segundos}s)`;
+        if (segundos <= 0) {
+          clearInterval(intervalo);
+          btn.disabled = false;
+          btn.innerText = textoBase;
+        }
+      }, 1000);
+    }
+
+    function mostrarAnuncioPublicitario() {
+      const modal = document.getElementById('modalPublicidad');
+      modal.style.display = 'flex';
+      iniciarContadorModal('btnContinuar', 'Continuar');
+    }
+
+    function cerrarPublicidad() {
+      document.getElementById('modalPublicidad').style.display = 'none';
+      resetearInactividad();
+    }
+
+    function mostrarInactividad() {
+      const modal = document.getElementById('modalInactividad');
+      modal.style.display = 'flex';
+      iniciarContadorModal('btnInactividad', 'Reactivar Sesión');
+    }
+
+    function reactivarSesion() {
+      document.getElementById('modalInactividad').style.display = 'none';
+      resetearInactividad();
+    }
+  </script>
+</body>
+</html>

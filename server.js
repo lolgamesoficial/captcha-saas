@@ -15,13 +15,15 @@ const pool = new Pool({
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Inicialización de la base de datos
+// Inicialización de la base de datos con migración de columnas
 const initDb = async () => {
   try {
+    // 1. Crear tabla base si no existe
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
-        usuario VARCHAR(255) UNIQUE NOT NULL,
+        usuario VARCHAR(255) UNIQUE,
+        email VARCHAR(255) UNIQUE,
         password VARCHAR(255) NOT NULL,
         balance DECIMAL(10, 4) DEFAULT 0.0000,
         captchas_resueltos INT DEFAULT 0,
@@ -30,7 +32,11 @@ const initDb = async () => {
       );
     `);
 
-    console.log('✅ Tablas verificadas correctamente.');
+    // 2. Forzar adición de columnas si la tabla ya existía previamente
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usuario VARCHAR(255) UNIQUE;`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS captchas_resueltos INT DEFAULT 0;`);
+
+    console.log('✅ Tablas y columnas verificadas correctamente.');
   } catch (err) {
     console.error('❌ Error al inicializar tablas:', err);
   }
@@ -38,7 +44,7 @@ const initDb = async () => {
 
 initDb();
 
-// Ruta: Registro de usuario (Apunta a /api/registro)
+// Ruta: Registro de usuario
 app.post('/api/registro', async (req, res) => {
   const { usuario, password } = req.body;
   if (!usuario || !password) {
@@ -49,13 +55,14 @@ app.post('/api/registro', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const apiKey = 'KEY-' + crypto.randomBytes(16).toString('hex');
 
-    const newUser = await pool.query(
-      'INSERT INTO users (usuario, password, api_key) VALUES ($1, $2, $3) RETURNING id, usuario, balance, captchas_resueltos',
+    await pool.query(
+      'INSERT INTO users (usuario, password, api_key) VALUES ($1, $2, $3)',
       [usuario, hashedPassword, apiKey]
     );
 
     res.json({ exito: true, mensaje: 'Usuario registrado con éxito' });
   } catch (err) {
+    console.error('❌ Error en /api/registro:', err);
     if (err.code === '23505') {
       return res.status(400).json({ exito: false, mensaje: 'El nombre de usuario ya existe' });
     }
@@ -88,11 +95,12 @@ app.post('/api/login', async (req, res) => {
       usuario: { 
         id: user.id, 
         nombre: user.usuario, 
-        saldo: parseFloat(user.balance).toFixed(3), 
-        captchasResueltos: user.captchas_resueltos 
+        saldo: parseFloat(user.balance || 0).toFixed(3), 
+        captchasResueltos: user.captchas_resueltos || 0 
       }
     });
   } catch (err) {
+    console.error('❌ Error en /api/login:', err);
     res.status(500).json({ exito: false, mensaje: 'Error interno del servidor' });
   }
 });
@@ -105,9 +113,8 @@ app.post('/api/resolver', async (req, res) => {
   }
 
   try {
-    // Suma 1 captcha y $0.001 de saldo por cada captcha
     const result = await pool.query(
-      'UPDATE users SET captchas_resueltos = captchas_resueltos + 1, balance = balance + 0.001 WHERE id = $1 RETURNING captchas_resueltos, balance',
+      'UPDATE users SET captchas_resueltos = COALESCE(captchas_resueltos, 0) + 1, balance = COALESCE(balance, 0) + 0.001 WHERE id = $1 RETURNING captchas_resueltos, balance',
       [usuarioId]
     );
 
@@ -126,6 +133,7 @@ app.post('/api/resolver', async (req, res) => {
       mostrarAnuncio
     });
   } catch (err) {
+    console.error('❌ Error en /api/resolver:', err);
     res.status(500).json({ exito: false, mensaje: 'Error al procesar el captcha' });
   }
 });

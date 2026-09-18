@@ -15,15 +15,17 @@ const pool = new Pool({
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Inicialización de la base de datos con migración de columnas
+// Inicialización limpia de la base de datos
 const initDb = async () => {
   try {
-    // 1. Crear tabla base si no existe
+    // Elimina la tabla antigua con inconsistencias de columnas si existe
+    await pool.query(`DROP TABLE IF EXISTS users CASCADE;`);
+
+    // Crea la tabla users con la estructura exacta que requiere el sistema
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
+      CREATE TABLE users (
         id SERIAL PRIMARY KEY,
-        usuario VARCHAR(255) UNIQUE,
-        email VARCHAR(255) UNIQUE,
+        usuario VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         balance DECIMAL(10, 4) DEFAULT 0.0000,
         captchas_resueltos INT DEFAULT 0,
@@ -32,13 +34,9 @@ const initDb = async () => {
       );
     `);
 
-    // 2. Forzar adición de columnas si la tabla ya existía previamente
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usuario VARCHAR(255) UNIQUE;`);
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS captchas_resueltos INT DEFAULT 0;`);
-
-    console.log('✅ Tablas y columnas verificadas correctamente.');
+    console.log('✅ Base de datos recreada e inicializada correctamente.');
   } catch (err) {
-    console.error('❌ Error al inicializar tablas:', err);
+    console.error('❌ Error al inicializar la base de datos:', err.message);
   }
 };
 
@@ -62,7 +60,7 @@ app.post('/api/registro', async (req, res) => {
 
     res.json({ exito: true, mensaje: 'Usuario registrado con éxito' });
   } catch (err) {
-    console.error('❌ Error en /api/registro:', err);
+    console.error('❌ Error en /api/registro:', err.message);
     if (err.code === '23505') {
       return res.status(400).json({ exito: false, mensaje: 'El nombre de usuario ya existe' });
     }
@@ -100,7 +98,7 @@ app.post('/api/login', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('❌ Error en /api/login:', err);
+    console.error('❌ Error en /api/login:', err.message);
     res.status(500).json({ exito: false, mensaje: 'Error interno del servidor' });
   }
 });
@@ -133,7 +131,7 @@ app.post('/api/resolver', async (req, res) => {
       mostrarAnuncio
     });
   } catch (err) {
-    console.error('❌ Error en /api/resolver:', err);
+    console.error('❌ Error en /api/resolver:', err.message);
     res.status(500).json({ exito: false, mensaje: 'Error al procesar el captcha' });
   }
 });

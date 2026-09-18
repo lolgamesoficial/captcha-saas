@@ -21,21 +21,11 @@ const initDb = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
+        usuario VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         balance DECIMAL(10, 4) DEFAULT 0.0000,
+        captchas_resueltos INT DEFAULT 0,
         api_key VARCHAR(255) UNIQUE NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS captcha_tasks (
-        id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES users(id),
-        captcha_type VARCHAR(50) NOT NULL,
-        status VARCHAR(20) DEFAULT 'pending',
-        solution TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -48,11 +38,11 @@ const initDb = async () => {
 
 initDb();
 
-// Ruta: Registro de usuario
-app.post('/api/register', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Todos los campos son obligatorios' });
+// Ruta: Registro de usuario (Apunta a /api/registro)
+app.post('/api/registro', async (req, res) => {
+  const { usuario, password } = req.body;
+  if (!usuario || !password) {
+    return res.status(400).json({ exito: false, mensaje: 'Todos los campos son obligatorios' });
   }
 
   try {
@@ -60,44 +50,83 @@ app.post('/api/register', async (req, res) => {
     const apiKey = 'KEY-' + crypto.randomBytes(16).toString('hex');
 
     const newUser = await pool.query(
-      'INSERT INTO users (email, password, api_key) VALUES ($1, $2, $3) RETURNING id, email, api_key, balance',
-      [email, hashedPassword, apiKey]
+      'INSERT INTO users (usuario, password, api_key) VALUES ($1, $2, $3) RETURNING id, usuario, balance, captchas_resueltos',
+      [usuario, hashedPassword, apiKey]
     );
 
-    res.json({ message: 'Usuario registrado con éxito', user: newUser.rows[0] });
+    res.json({ exito: true, mensaje: 'Usuario registrado con éxito' });
   } catch (err) {
     if (err.code === '23505') {
-      return res.status(400).json({ error: 'El correo electrónico ya está registrado' });
+      return res.status(400).json({ exito: false, mensaje: 'El nombre de usuario ya existe' });
     }
-    res.status(500).json({ error: 'Error interno del servidor' });
+    res.status(500).json({ exito: false, mensaje: 'Error interno del servidor' });
   }
 });
 
 // Ruta: Login de usuario
 app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Todos los campos son obligatorios' });
+  const { usuario, password } = req.body;
+  if (!usuario || !password) {
+    return res.status(400).json({ exito: false, mensaje: 'Todos los campos son obligatorios' });
   }
 
   try {
-    const userQuery = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const userQuery = await pool.query('SELECT * FROM users WHERE usuario = $1', [usuario]);
     if (userQuery.rows.length === 0) {
-      return res.status(400).json({ error: 'Credenciales inválidas' });
+      return res.status(400).json({ exito: false, mensaje: 'Usuario o contraseña incorrectos' });
     }
 
     const user = userQuery.rows[0];
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      return res.status(400).json({ error: 'Credenciales inválidas' });
+      return res.status(400).json({ exito: false, mensaje: 'Usuario o contraseña incorrectos' });
     }
 
     res.json({
-      message: 'Inicio de sesión exitoso',
-      user: { id: user.id, email: user.email, api_key: user.api_key, balance: user.balance }
+      exito: true,
+      mensaje: 'Inicio de sesión exitoso',
+      usuario: { 
+        id: user.id, 
+        nombre: user.usuario, 
+        saldo: parseFloat(user.balance).toFixed(3), 
+        captchasResueltos: user.captchas_resueltos 
+      }
     });
   } catch (err) {
-    res.status(500).json({ error: 'Error interno del servidor' });
+    res.status(500).json({ exito: false, mensaje: 'Error interno del servidor' });
+  }
+});
+
+// Ruta: Resolver Captchas
+app.post('/api/resolver', async (req, res) => {
+  const { usuarioId } = req.body;
+  if (!usuarioId) {
+    return res.status(400).json({ exito: false, mensaje: 'Usuario no identificado' });
+  }
+
+  try {
+    // Suma 1 captcha y $0.001 de saldo por cada captcha
+    const result = await pool.query(
+      'UPDATE users SET captchas_resueltos = captchas_resueltos + 1, balance = balance + 0.001 WHERE id = $1 RETURNING captchas_resueltos, balance',
+      [usuarioId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ exito: false, mensaje: 'Usuario no encontrado' });
+    }
+
+    const totalCaptchas = result.rows[0].captchas_resueltos;
+    const saldoAcumulado = parseFloat(result.rows[0].balance).toFixed(3);
+    const mostrarAnuncio = totalCaptchas % 20 === 0;
+
+    res.json({
+      exito: true,
+      totalCaptchas,
+      saldoAcumulado,
+      mostrarAnuncio
+    });
+  } catch (err) {
+    res.status(500).json({ exito: false, mensaje: 'Error al procesar el captcha' });
   }
 });
 

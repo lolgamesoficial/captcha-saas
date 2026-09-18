@@ -14,14 +14,41 @@ const pool = new Pool({
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Prueba de conexión
-pool.connect((err, client, release) => {
-  if (err) {
-    return console.error('Error al conectar a PostgreSQL:', err.stack);
+// Función para crear las tablas automáticamente en la base de datos
+const initDb = async () => {
+  try {
+    // Tabla de Usuarios
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        balance DECIMAL(10, 4) DEFAULT 0.0000,
+        api_key VARCHAR(255) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Tabla de Tareas/Captchas
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS captcha_tasks (
+        id SERIAL PRIMARY KEY,
+        user_id INT REFERENCES users(id),
+        captcha_type VARCHAR(50) NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        solution TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    console.log('✅ Tablas en PostgreSQL verificadas/creadas correctamente.');
+  } catch (err) {
+    console.error('❌ Error al inicializar las tablas:', err);
   }
-  console.log('Base de datos PostgreSQL conectada correctamente.');
-  release();
-});
+};
+
+// Inicializar base de datos
+initDb();
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

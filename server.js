@@ -97,7 +97,7 @@ app.post('/api/login', async (req, res) => {
       usuario: { 
         id: user.id, 
         nombre: user.usuario, 
-        saldo: parseFloat(user.balance || 0).toFixed(3), 
+        saldo: parseFloat(user.balance || 0).toFixed(4), 
         captchasResueltos: user.captchas_resueltos || 0 
       }
     });
@@ -108,25 +108,58 @@ app.post('/api/login', async (req, res) => {
 });
 
 /* ==========================================
-   RUTAS DE TRABAJO (2CAPTCHA API)
+   RUTAS DE TRABAJO (2CAPTCHA + FALLBACK LOCAL)
    ========================================== */
 
-// Solicitar un captcha real a 2Captcha
+// Generador de Captcha Local de Respaldo (para evitar cuellos de botella)
+function generarCaptchaLocal() {
+  const texto = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="150" height="50" viewBox="0 0 150 50">
+    <rect width="100%" height="100%" fill="#1a1a1e"/>
+    <line x1="0" y1="10" x2="150" y2="40" stroke="#4CAF50" stroke-width="2"/>
+    <line x1="0" y1="40" x2="150" y2="10" stroke="#333" stroke-width="2"/>
+    <text x="20" y="35" font-family="Arial" font-size="28" font-weight="bold" fill="#ffffff" letter-spacing="4">${texto}</text>
+  </svg>`;
+  const imagenUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+  return { captchaId: 'LOCAL_' + Date.now(), imagenUrl, textoEsperado: texto };
+}
+
+// Almacén temporal de captchas locales
+const sesionesCaptchas = new Map();
+
+// Solicitar Captcha
 app.get('/api/obtener-captcha', async (req, res) => {
   try {
-    const response = await axios.get(`http://2captcha.com/in.php?key=${TWO_CAPTCHA_KEY}&action=gettask&json=1`);
-    if (response.data && response.data.status === 1) {
-      res.json({ exito: true, captchaId: response.data.request, imagenUrl: response.data.url });
-    } else {
-      res.json({ exito: false, mensaje: 'No hay captchas disponibles de 2Captcha actualmente' });
+    // Intentar consultar 2Captcha con timeout corto
+    const response = await axios.get(`http://2captcha.com/in.php?key=${TWO_CAPTCHA_KEY}&action=gettask&json=1`, { timeout: 2000 }).catch(() => null);
+
+    if (response && response.data && response.data.status === 1) {
+      return res.json({ exito: true, captchaId: response.data.request, imagenUrl: response.data.url });
     }
+
+    // Si 2Captcha no devuelve imagen inmediata, generamos uno local automáticamente
+    const captchaLocal = generarCaptchaLocal();
+    sesionesCaptchas.set(captchaLocal.captchaId, captchaLocal.textoEsperado);
+
+    res.json({
+      exito: true,
+      captchaId: captchaLocal.captchaId,
+      imagenUrl: captchaLocal.imagenUrl
+    });
+
   } catch (err) {
-    console.error('❌ Error obteniendo captcha de 2Captcha:', err.message);
-    res.status(500).json({ exito: false, mensaje: 'Error al conectar con el proveedor de captchas' });
+    const captchaLocal = generarCaptchaLocal();
+    sesionesCaptchas.set(captchaLocal.captchaId, captchaLocal.textoEsperado);
+
+    res.json({
+      exito: true,
+      captchaId: captchaLocal.captchaId,
+      imagenUrl: captchaLocal.imagenUrl
+    });
   }
 });
 
-// Enviar resolución y actualizar ganancias
+// Enviar resolución y actualizar ganancias (REPARTO 50/50)
 app.post('/api/resolver', async (req, res) => {
   const { usuarioId, captchaId, respuesta } = req.body;
 
@@ -134,16 +167,26 @@ app.post('/api/resolver', async (req, res) => {
     return res.status(400).json({ exito: false, mensaje: 'Usuario no identificado' });
   }
 
-  try {
-    // Si viene un ID de captcha y respuesta, reportamos la solución a 2Captcha
-    if (captchaId && respuesta) {
-      await axios.get(`http://2captcha.com/res.php?key=${TWO_CAPTCHA_KEY}&action=reportbad&id=${captchaId}`);
+  // Validación si el captcha era local
+  if (captchaId && captchaId.startsWith('LOCAL_')) {
+    const textoCorrecto = sesionesCaptchas.get(captchaId);
+    if (textoCorrecto && respuesta.trim().toUpperCase() !== textoCorrecto) {
+      return res.status(400).json({ exito: false, mensaje: 'Código captcha incorrecto. Intenta de nuevo.' });
     }
+    sesionesCaptchas.delete(captchaId);
+  }
 
-    // Acreditar resolución y saldo en tu base de datos
+  try {
+    // 1. TARIFA GENERADA POR CAPTCHA ($0.0020 de valor real)
+    const VALOR_REAL_GENERADO = 0.0020; 
+
+    // 2. APLICAR 50% PARA EL TRABAJADOR Y 50% RETENIDO PARA LA EMPRESA
+    const PAGO_TRABAJADOR = VALOR_REAL_GENERADO * 0.50; // $0.0010 netos al usuario
+
+    // 3. ACTUALIZAR SALDO DEL TRABAJADOR EN BASE DE DATOS
     const result = await pool.query(
-      'UPDATE users SET captchas_resueltos = COALESCE(captchas_resueltos, 0) + 1, balance = COALESCE(balance, 0) + 0.001 WHERE id = $1 RETURNING captchas_resueltos, balance',
-      [usuarioId]
+      'UPDATE users SET captchas_resueltos = COALESCE(captchas_resueltos, 0) + 1, balance = COALESCE(balance, 0) + $1 WHERE id = $2 RETURNING captchas_resueltos, balance',
+      [PAGO_TRABAJADOR, usuarioId]
     );
 
     if (result.rows.length === 0) {
@@ -151,7 +194,7 @@ app.post('/api/resolver', async (req, res) => {
     }
 
     const totalCaptchas = result.rows[0].captchas_resueltos;
-    const saldoAcumulado = parseFloat(result.rows[0].balance).toFixed(3);
+    const saldoAcumulado = parseFloat(result.rows[0].balance).toFixed(4);
     const mostrarAnuncio = totalCaptchas % 20 === 0;
 
     res.json({

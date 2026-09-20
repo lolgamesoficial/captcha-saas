@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel 1 - Captchas | Agencia Digital</title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #121214; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+    .card { background: #1a1a1e; border: 1px solid #333; padding: 20px; border-radius: 10px; width: 100%; max-width: 450px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+    .stats { display: flex; justify-content: space-around; background: #26262b; padding: 10px; border-radius: 8px; margin-bottom: 20px; }
+    .stat-box { font-size: 14px; color: #aaa; }
+    .stat-val { font-size: 18px; font-weight: bold; color: #4CAF50; }
+    .captcha-container { background: #000; padding: 15px; border-radius: 8px; margin-bottom: 15px; min-height: 60px; display: flex; align-items: center; justify-content: center; }
+    img { max-width: 100%; border-radius: 4px; }
+    input[type="text"] { width: 80%; padding: 10px; font-size: 16px; border-radius: 5px; border: 1px solid #444; background: #222; color: #fff; text-align: center; margin-bottom: 15px; }
+    button { background: #4CAF50; color: #fff; border: none; padding: 12px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 85%; font-weight: bold; }
+    button:hover { background: #45a049; }
+    .ad-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); justify-content: center; align-items: center; flex-direction: column; z-index: 1000; }
+    .ad-box { background: #222; padding: 30px; border-radius: 10px; text-align: center; border: 2px solid #4CAF50; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Panel 1: Workstation 2Captcha</h2>
+    <div class="stats">
+      <div class="stat-box">Progreso Bloque<br><span id="bloqueCount" class="stat-val">0 / 20</span></div>
+      <div class="stat-val">Saldo Net<br>$<span id="saldoUsuario">0.0000</span></div>
+    </div>
+
+    <div class="captcha-container" id="captchaBox">
+      <p style="color:#aaa;">Cargando captcha...</p>
+    </div>
+
+    <input type="text" id="respuestaCaptcha" placeholder="Ingresa el texto aquí" autocomplete="off">
+    <br>
+    <button onclick="enviarRespuesta()">Enviar Captcha</button>
+  </div>
+
+  <!-- Modal de Publicidad Obligatoria por Bloque -->
+  <div class="ad-modal" id="adModal">
+    <div class="ad-box">
+      <h3 style="color: #4CAF50;">¡Bloque Completado!</h3>
+      <p>Procesando y verificando ganancias del bloque...</p>
+      <div id="adSpace" style="margin: 20px 0; background: #333; padding: 20px; border-radius: 5px;">
+        <!-- Espacio reservado para Banner de Adsterra -->
+        <p style="color:#888;">[ Espacio Publicitario Adsterra ]</p>
+      </div>
+      <button onclick="cerrarPublicidad()">Continuar Trabajando</button>
+    </div>
+  </div>
+
+  <script>
+    let currentCaptchaId = null;
+    let usuarioId = localStorage.getItem('usuarioId') || 1; // ID temporal de prueba
+
+    async function cargarCaptcha() {
+      document.getElementById('captchaBox').innerHTML = '<p style="color:#aaa;">Cargando captcha...</p>';
+      document.getElementById('respuestaCaptcha').value = '';
+
+      try {
+        const res = await fetch('/api/obtener-captcha');
+        const data = await res.json();
+
+        if (data.exito) {
+          currentCaptchaId = data.captchaId;
+          document.getElementById('captchaBox').innerHTML = `<img src="${data.imagenUrl}" alt="Captcha">`;
+        } else {
+          document.getElementById('captchaBox').innerHTML = `<p style="color: #ff5555;">${data.mensaje}</p>`;
+        }
+      } catch (err) {
+        document.getElementById('captchaBox').innerHTML = '<p style="color: #ff5555;">Error de conexión.</p>';
+      }
+    }
+
+    async function enviarRespuesta() {
+      const respuesta = document.getElementById('respuestaCaptcha').value.trim();
+      if (!respuesta) return alert('Ingresa la respuesta del captcha');
+
+      try {
+        const res = await fetch('/api/resolver', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuarioId, captchaId: currentCaptchaId, respuesta })
+        });
+
+        const data = await res.json();
+
+        if (data.exito) {
+          document.getElementById('saldoUsuario').innerText = data.saldoAcumulado;
+          const enBloque = data.totalCaptchas % 20;
+          document.getElementById('bloqueCount').innerText = `${enBloque === 0 && data.totalCaptchas > 0 ? 20 : enBloque} / 20`;
+
+          if (data.mostrarAnuncio) {
+            document.getElementById('adModal').style.display = 'flex';
+          } else {
+            cargarCaptcha();
+          }
+        } else {
+          alert(data.mensaje);
+          cargarCaptcha();
+        }
+      } catch (err) {
+        alert('Error al enviar la respuesta');
+      }
+    }
+
+    function cerrarPublicidad() {
+      document.getElementById('adModal').style.display = 'none';
+      document.getElementById('bloqueCount').innerText = '0 / 20';
+      cargarCaptcha();
+    }
+
+    // Carga inicial
+    cargarCaptcha();
+  </script>
+</body>
+</html>

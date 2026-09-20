@@ -108,7 +108,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 /* ==========================================
-   RUTAS DE TRABAJO (2CAPTCHA + FALLBACK LOCAL)
+   RUTAS DE TRABAJO (PANEL 1: 2CAPTCHA + FALLBACK LOCAL)
    ========================================== */
 
 // Generador de Captcha Local de Respaldo (para evitar cuellos de botella)
@@ -130,14 +130,12 @@ const sesionesCaptchas = new Map();
 // Solicitar Captcha
 app.get('/api/obtener-captcha', async (req, res) => {
   try {
-    // Intentar consultar 2Captcha con timeout corto
     const response = await axios.get(`http://2captcha.com/in.php?key=${TWO_CAPTCHA_KEY}&action=gettask&json=1`, { timeout: 2000 }).catch(() => null);
 
     if (response && response.data && response.data.status === 1) {
       return res.json({ exito: true, captchaId: response.data.request, imagenUrl: response.data.url });
     }
 
-    // Si 2Captcha no devuelve imagen inmediata, generamos uno local automáticamente
     const captchaLocal = generarCaptchaLocal();
     sesionesCaptchas.set(captchaLocal.captchaId, captchaLocal.textoEsperado);
 
@@ -159,7 +157,7 @@ app.get('/api/obtener-captcha', async (req, res) => {
   }
 });
 
-// Enviar resolución y actualizar ganancias (REPARTO 50/50)
+// Enviar resolución y actualizar ganancias (REPARTO 50/50 + CÁLCULO POR BLOQUES DE 20)
 app.post('/api/resolver', async (req, res) => {
   const { usuarioId, captchaId, respuesta } = req.body;
 
@@ -210,9 +208,15 @@ app.post('/api/resolver', async (req, res) => {
 });
 
 /* ==========================================
-   RUTA PRINCIPAL
+   RUTAS DE NAVEGACIÓN Y PANELES
    ========================================== */
 
+// Panel 1: Hoja de trabajo dedicada a 2Captcha
+app.get('/panel-2captcha', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'panel-2captcha.html'));
+});
+
+// Ruta Principal (Portada/Login)
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
